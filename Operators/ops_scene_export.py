@@ -19,7 +19,12 @@ else:
 import bpy
 import os
 
-from ..property_groups import get_addon_prop_root
+from ..property_groups import (
+    get_addon_prop_root,
+    get_export_settings,
+    get_fbx_parameters,
+    get_vrm_parameters,
+)
 
 """---------------------------------------------------------
 ------------------------------------------------------------

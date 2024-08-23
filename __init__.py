@@ -20,6 +20,7 @@ if "bpy" in locals():
         "preparation_logger",
         "debug",
         "property_groups",
+        "ops_scene_export",
         "ui_panels",
     ]
 
@@ -31,6 +32,7 @@ else:
     from .Logging import preparation_logger
     from . import debug
     from . import property_groups
+    from .Operators import ops_scene_export
     from .UI import ui_panels
 
 
@@ -58,6 +60,7 @@ logger = preparating_logger(__name__)
 ---------------------------------------------------------"""
 CLASSES = (
     *property_groups.CLASSES,
+    *ops_scene_export.CLASSES,
     *ui_panels.CLASSES,
 )
 
