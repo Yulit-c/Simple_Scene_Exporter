@@ -145,13 +145,18 @@ class SSE_OT_scene_export(SSE_OperatorBase):
         if not dest_path.exists():
             self.report({"INFO"}, f"Dest Path does not exist : {dest_path}")
             return {"CANCELLED"}
+        # プロパティに応じて今日付のディレクトリを作成する
+        date = datetime.today()
+        today = f"{date.year}_{date.month:0>2}_{date.day:0>2}"
+        if export_settings.make_today_sub_dir:
+            dest_path = dest_path.joinpath(today)
+            dest_path.mkdir(exist_ok=True)
 
         # 出力ファイルパスを生成
-        date = datetime.today()
         base_name = f"{export_settings.file_base_name}"
+        # 今日付のタイムスタンプを付与する
         if export_settings.add_date_suffix:
-            suffix = f"_{date.year}{date.month:0>2}{date.day:0>2}"
-            base_name += suffix
+            base_name += f"_{today}"
         # Overrideしない場合は連番を付与する
         new_numbering = None
         if not export_settings.enable_overwrite:
@@ -164,7 +169,7 @@ class SSE_OT_scene_export(SSE_OperatorBase):
             numeric = new_numbering if new_numbering else "000"
             base_name += f"_{numeric}"
 
-        file_name = f"{base_name }.{self.exporter.lower()}"  # {base_name}_{datetime}_{numeric}.{extension}
+        file_name = f"{base_name }.{self.exporter.lower()}"  # {base_name}_{YYYY_MM_DD}_{numeric}.{extension}
         file_path = str(dest_path.joinpath(file_name))
 
         # アンドゥ履歴へ登録

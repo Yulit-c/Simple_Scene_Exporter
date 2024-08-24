@@ -41,20 +41,24 @@ logger = preparating_logger(__name__)
 
 
 class SSE_SCENE_export_settings(bpy.types.PropertyGroup):
+    source_collection: bpy.props.PointerProperty(
+        name="Source Collection",
+        description="",
+        type=bpy.types.Collection,
+    )
     destination_path: bpy.props.StringProperty(
         name="Destination Path", description="", default="", subtype="DIR_PATH"
+    )
+    make_today_sub_dir: bpy.props.BoolProperty(
+        name="Make Today's Dir",
+        description="",
+        default=True,
     )
 
     file_base_name: bpy.props.StringProperty(
         name="file_base_name",
         description="",
         default="",
-    )
-
-    source_collection: bpy.props.PointerProperty(
-        name="Source Collection",
-        description="",
-        type=bpy.types.Collection,
     )
 
     add_date_suffix: bpy.props.BoolProperty(

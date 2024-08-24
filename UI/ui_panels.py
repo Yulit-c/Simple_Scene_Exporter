@@ -63,9 +63,12 @@ class SSE_PT_view_3d_panel(bpy.types.Panel):
 
         col: bpy.types.UILayout
         col = layout.column()
+        col.prop(export_settings, "source_collection")
+        col.separator()
         col.prop(export_settings, "destination_path")
         col.prop(export_settings, "file_base_name")
-        col.prop(export_settings, "source_collection")
+        col.prop(export_settings, "make_today_sub_dir")
+        col.separator(factor=1.0)
         col.prop(export_settings, "add_date_suffix")
         col.prop(export_settings, "enable_overwrite")
         layout.separator()
