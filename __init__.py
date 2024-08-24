@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Simple Scene Exporter",
     "author": "Yu-Lit",
-    "version": (0, 0, 1),
+    "version": (0, 1, 0),
     "blender": (4, 1, 0),
     "location": "",
     "description": "",

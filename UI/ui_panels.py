@@ -26,8 +26,12 @@ from ..property_groups import (
     get_fbx_parameters,
     get_vrm_parameters,
 )
+from ..Utils.utils_common import get_enabled_addon_list
+
 from ..Operators.ops_scene_export import (
     SSE_OT_scene_export,
+    SSE_OT_set_fbx_parameters,
+    SSE_OT_set_vrm_parameters,
 )
 
 """---------------------------------------------------------
@@ -48,9 +52,9 @@ logger = preparating_logger(__name__)
 
 
 class SSE_PT_view_3d_panel(bpy.types.Panel):
+    bl_category = "SSE"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "SSE"
     bl_label = "Simple Export"
 
     def draw(self, context):
@@ -61,13 +65,31 @@ class SSE_PT_view_3d_panel(bpy.types.Panel):
         col = layout.column()
         col.prop(export_settings, "destination_path")
         col.prop(export_settings, "file_base_name")
+        col.prop(export_settings, "source_collection")
         col.prop(export_settings, "add_date_suffix")
         col.prop(export_settings, "enable_overwrite")
         layout.separator()
 
         col = layout.column()
-        col.operator(SSE_OT_scene_export.bl_idname)
-        col.operator(SSE_OT_scene_export.bl_idname)
+        # ----------------------------------------------------------
+        #    FBX Exporter
+        # ----------------------------------------------------------
+        exporter = "FBX"
+        row = col.row(align=True)
+        op = row.operator(SSE_OT_scene_export.bl_idname)
+        op.exporter = exporter
+        op = row.operator(SSE_OT_set_fbx_parameters.bl_idname, text="", icon="PREFERENCES")
+        op.exporter = exporter
+        # ----------------------------------------------------------
+        #    VRM Exporter
+        # ----------------------------------------------------------
+        exporter = "VRM"
+        row = col.row(align=True)
+        row.enabled = "VRM_Addon_for_Blender" in get_enabled_addon_list()
+        op = row.operator(SSE_OT_scene_export.bl_idname)
+        op.exporter = exporter
+        op = row.operator(SSE_OT_set_vrm_parameters.bl_idname, text="", icon="PREFERENCES")
+        op.exporter = exporter
 
 
 """---------------------------------------------------------

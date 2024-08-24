@@ -12,9 +12,14 @@ if "bpy" in locals():
 else:
     from .Logging import preparation_logger
 
+from typing import Any
 
 import bpy
-from bpy_extras.io_utils import orientation_helper
+from bpy_extras.io_utils import (
+    orientation_helper,
+    path_reference_mode,
+    axis_conversion,
+)
 
 
 """---------------------------------------------------------
@@ -46,6 +51,12 @@ class SSE_SCENE_export_settings(bpy.types.PropertyGroup):
         default="",
     )
 
+    source_collection: bpy.props.PointerProperty(
+        name="Source Collection",
+        description="",
+        type=bpy.types.Collection,
+    )
+
     add_date_suffix: bpy.props.BoolProperty(
         name="Add Date Suffix",
         description="",
@@ -59,21 +70,137 @@ class SSE_SCENE_export_settings(bpy.types.PropertyGroup):
     )
 
 
+class ExporterParametersBase(bpy.types.PropertyGroup):
+    def get_parameters_as_dict(self, ignore: tuple[str]) -> dict[str, Any]:
+        dic_op_parameters = {}
+        # 自身の全フィールドの値を辞書として取得する("ignore"で指定されたものは除外)
+        [
+            dic_op_parameters.setdefault(k, getattr(self, k))
+            for k in [*self.__annotations__]
+            if not k in ignore
+        ]
+        return dic_op_parameters
+
+    def set_parameters(
+        self, target_data: bpy.types.Operator | bpy.types.PropertyGroup, parameters: dict[Any]
+    ):
+        # 取得したパラメーターをOperatorまたはPropertyGroupのプロパティにセットする｡
+        for k, v in parameters.items():
+            setattr(target_data, k, v)
+
+
 @orientation_helper(axis_forward="-Z", axis_up="Y")
-class SSE_SCENE_fbx_parameters(bpy.types.PropertyGroup):
+class FBXParameters(ExporterParametersBase):
+
+    ignore_props = (
+        "exporter",
+        "filter_glob",
+        "directory",
+        "ui_tab",
+        "filepath",
+        "files",
+        "use_selection",
+        "use_visible",
+        "use_active_collection",
+        "batch_mode",
+        "use_batch_own_dir",
+        "expand_include",
+        "expand_transform",
+        "expand_orientation",
+        "expand_armature",
+        "expand_animation",
+    )
+
+    # ----------------------------------------------------------
+    #    For UI
+    # ----------------------------------------------------------
+    expand_include: bpy.props.BoolProperty(
+        name="Expand Include",
+        description="",
+        default=True,
+    )
+    expand_transform: bpy.props.BoolProperty(
+        name="Expand Include",
+        description="",
+        default=True,
+    )
+    expand_orientation: bpy.props.BoolProperty(
+        name="Expand Include",
+        description="",
+        default=True,
+    )
+    expand_armature: bpy.props.BoolProperty(
+        name="Expand Include",
+        description="",
+        default=False,
+    )
+    expand_animation: bpy.props.BoolProperty(
+        name="Expand Include",
+        description="",
+        default=False,
+    )
+    # -----------------------------------------------------------
+
     filename_ext = ".fbx"
     filter_glob: bpy.props.StringProperty(default="*.fbx", options={"HIDDEN"})
 
-    use_manual_orientation: bpy.props.BoolProperty(
-        name="Manual Orientation",
-        description="Specify orientation and scale, instead of using embedded data in FBX file",
+    use_selection: bpy.props.BoolProperty(
+        name="Selected Objects",
+        description="Export selected and visible objects only",
+        default=False,
+    )
+    use_visible: bpy.props.BoolProperty(
+        name="Visible Objects", description="Export visible objects only", default=False
+    )
+    use_active_collection: bpy.props.BoolProperty(
+        name="Active Collection",
+        description="Export only objects from the active collection (and its children)",
         default=False,
     )
     global_scale: bpy.props.FloatProperty(
         name="Scale",
+        description="Scale all data (Some importers do not support scaled armatures!)",
         min=0.001,
         max=1000.0,
+        soft_min=0.01,
+        soft_max=1000.0,
         default=1.0,
+    )
+    apply_unit_scale: bpy.props.BoolProperty(
+        name="Apply Unit",
+        description="Take into account current Blender units settings (if unset, raw Blender Units values are used as-is)",
+        default=True,
+    )
+    apply_scale_options: bpy.props.EnumProperty(
+        items=(
+            (
+                "FBX_SCALE_NONE",
+                "All Local",
+                "Apply custom scaling and units scaling to each object transformation, FBX scale remains at 1.0",
+            ),
+            (
+                "FBX_SCALE_UNITS",
+                "FBX Units Scale",
+                "Apply custom scaling to each object transformation, and units scaling to FBX scale",
+            ),
+            (
+                "FBX_SCALE_CUSTOM",
+                "FBX Custom Scale",
+                "Apply custom scaling to FBX scale, and units scaling to each object transformation",
+            ),
+            ("FBX_SCALE_ALL", "FBX All", "Apply custom scaling and units scaling to FBX scale"),
+        ),
+        name="Apply Scalings",
+        description="How to apply custom and units scalings in generated FBX file "
+        "(Blender uses FBX scale to detect units on import, "
+        "but many other applications do not handle the same way)",
+    )
+
+    use_space_transform: bpy.props.BoolProperty(
+        name="Use Space Transform",
+        description="Apply global space transform to the object rotations. When disabled "
+        "only the axis space is written to the file and all object transforms are left as-is",
+        default=True,
     )
     bake_space_transform: bpy.props.BoolProperty(
         name="Apply Transform",
@@ -83,84 +210,91 @@ class SSE_SCENE_fbx_parameters(bpy.types.PropertyGroup):
         default=False,
     )
 
-    use_custom_normals: bpy.props.BoolProperty(
-        name="Custom Normals",
-        description="Import custom normals, if available (otherwise Blender will recompute them)",
+    object_types: bpy.props.EnumProperty(
+        name="Object Types",
+        options={"ENUM_FLAG"},
+        items=(
+            ("EMPTY", "Empty", ""),
+            ("CAMERA", "Camera", ""),
+            ("LIGHT", "Lamp", ""),
+            ("ARMATURE", "Armature", "WARNING: not supported in dupli/group instances"),
+            ("MESH", "Mesh", ""),
+            ("OTHER", "Other", "Other geometry types, like curve, metaball, etc. (converted to meshes)"),
+        ),
+        description="Which kind of object to export",
+        default={"EMPTY", "CAMERA", "LIGHT", "ARMATURE", "MESH", "OTHER"},
+    )
+
+    use_mesh_modifiers: bpy.props.BoolProperty(
+        name="Apply Modifiers",
+        description="Apply modifiers to mesh objects (except Armature ones) - "
+        "WARNING: prevents exporting shape keys",
         default=True,
+    )
+    use_mesh_modifiers_render: bpy.props.BoolProperty(
+        name="Use Modifiers Render Setting",
+        description="Use render settings when applying modifiers to mesh objects (DISABLED in Blender 2.8)",
+        default=True,
+    )
+    mesh_smooth_type: bpy.props.EnumProperty(
+        name="Smoothing",
+        items=(
+            ("OFF", "Normals Only", "Export only normals instead of writing edge or face smoothing data"),
+            ("FACE", "Face", "Write face smoothing"),
+            ("EDGE", "Edge", "Write edge smoothing"),
+        ),
+        description="Export smoothing information "
+        "(prefer 'Normals Only' option if your target importer understand split normals)",
+        default="OFF",
     )
     colors_type: bpy.props.EnumProperty(
         name="Vertex Colors",
         items=(
-            ("NONE", "None", "Do not import color attributes"),
-            ("SRGB", "sRGB", "Expect file colors in sRGB color space"),
-            ("LINEAR", "Linear", "Expect file colors in linear color space"),
+            ("NONE", "None", "Do not export color attributes"),
+            ("SRGB", "sRGB", "Export colors in sRGB color space"),
+            ("LINEAR", "Linear", "Export colors in linear color space"),
         ),
-        description="Import vertex color attributes",
+        description="Export vertex color attributes",
         default="SRGB",
     )
-
-    use_image_search: bpy.props.BoolProperty(
-        name="Image Search",
-        description="Search subdirs for any associated images (WARNING: may be slow)",
-        default=True,
-    )
-
-    use_alpha_decals: bpy.props.BoolProperty(
-        name="Alpha Decals",
-        description="Treat materials with alpha as decals (no shadow casting)",
+    prioritize_active_color: bpy.props.BoolProperty(
+        name="Prioritize Active Color",
+        description="Make sure active color will be exported first. Could be important "
+        "since some other software can discard other color attributes besides the first one",
         default=False,
     )
-    decal_offset: bpy.props.FloatProperty(
-        name="Decal Offset",
-        description="Displace geometry of alpha meshes",
-        min=0.0,
-        max=1.0,
-        default=0.0,
-    )
-
-    use_anim: bpy.props.BoolProperty(
-        name="Import Animation",
-        description="Import FBX animation",
-        default=True,
-    )
-    anim_offset: bpy.props.FloatProperty(
-        name="Animation Offset",
-        description="Offset to apply to animation during import, in frames",
-        default=1.0,
-    )
-
     use_subsurf: bpy.props.BoolProperty(
-        name="Subdivision Data",
-        description="Import FBX subdivision information as subdivision surface modifiers",
+        name="Export Subdivision Surface",
+        description="Export the last Catmull-Rom subdivision modifier as FBX subdivision "
+        "(does not apply the modifier even if 'Apply Modifiers' is enabled)",
         default=False,
     )
-
+    use_mesh_edges: bpy.props.BoolProperty(
+        name="Loose Edges",
+        description="Export loose edges (as two-vertices polygons)",
+        default=False,
+    )
+    use_tspace: bpy.props.BoolProperty(
+        name="Tangent Space",
+        description="Add binormal and tangent vectors, together with normal they form the tangent space "
+        "(will only work correctly with tris/quads only meshes!)",
+        default=False,
+    )
+    use_triangles: bpy.props.BoolProperty(
+        name="Triangulate Faces",
+        description="Convert all faces to triangles",
+        default=False,
+    )
     use_custom_props: bpy.props.BoolProperty(
         name="Custom Properties",
-        description="Import user properties as custom properties",
-        default=True,
-    )
-    use_custom_props_enum_as_string: bpy.props.BoolProperty(
-        name="Import Enums As Strings",
-        description="Store enumeration values as strings",
-        default=True,
-    )
-
-    ignore_leaf_bones: bpy.props.BoolProperty(
-        name="Ignore Leaf Bones",
-        description="Ignore the last bone at the end of each chain (used to mark the length of the previous bone)",
+        description="Export custom properties",
         default=False,
     )
-    force_connect_children: bpy.props.BoolProperty(
-        name="Force Connect Children",
-        description="Force connection of children bones to their parent, even if their computed head/tail "
-        "positions do not match (can be useful with pure-joints-type armatures)",
-        default=False,
-    )
-    automatic_bone_orientation: bpy.props.BoolProperty(
-        name="Automatic Bone Orientation",
-        description="Try to align the major bone axis with the bone children",
-        default=False,
+    add_leaf_bones: bpy.props.BoolProperty(
+        name="Add Leaf Bones",
+        description="Append a final bone to the end of each chain to specify last bone length "
+        "(use this when you intend to edit the armature from exported data)",
+        default=True,  # False for commit!
     )
     primary_bone_axis: bpy.props.EnumProperty(
         name="Primary Bone Axis",
@@ -186,15 +320,151 @@ class SSE_SCENE_fbx_parameters(bpy.types.PropertyGroup):
         ),
         default="X",
     )
-
-    use_prepost_rot: bpy.props.BoolProperty(
-        name="Use Pre/Post Rotation",
-        description="Use pre/post rotation from FBX transform (you may have to disable that in some cases)",
+    use_armature_deform_only: bpy.props.BoolProperty(
+        name="Only Deform Bones",
+        description="Only write deforming bones (and non-deforming ones when they have deforming children)",
+        default=False,
+    )
+    armature_nodetype: bpy.props.EnumProperty(
+        name="Armature FBXNode Type",
+        items=(
+            ("NULL", "Null", "'Null' FBX node, similar to Blender's Empty (default)"),
+            ("ROOT", "Root", "'Root' FBX node, supposed to be the root of chains of bones..."),
+            ("LIMBNODE", "LimbNode", "'LimbNode' FBX node, a regular joint between two bones..."),
+        ),
+        description="FBX type of node (object) used to represent Blender's armatures "
+        "(use the Null type unless you experience issues with the other app, "
+        "as other choices may not import back perfectly into Blender...)",
+        default="NULL",
+    )
+    bake_anim: bpy.props.BoolProperty(
+        name="Baked Animation",
+        description="Export baked keyframe animation",
         default=True,
+    )
+    bake_anim_use_all_bones: bpy.props.BoolProperty(
+        name="Key All Bones",
+        description="Force exporting at least one key of animation for all bones "
+        "(needed with some target applications, like UE4)",
+        default=True,
+    )
+    bake_anim_use_nla_strips: bpy.props.BoolProperty(
+        name="NLA Strips",
+        description="Export each non-muted NLA strip as a separated FBX's AnimStack, if any, "
+        "instead of global scene animation",
+        default=True,
+    )
+    bake_anim_use_all_actions: bpy.props.BoolProperty(
+        name="All Actions",
+        description="Export each action as a separated FBX's AnimStack, instead of global scene animation "
+        "(note that animated objects will get all actions compatible with them, "
+        "others will get no animation at all)",
+        default=True,
+    )
+    bake_anim_force_startend_keying: bpy.props.BoolProperty(
+        name="Force Start/End Keying",
+        description="Always add a keyframe at start and end of actions for animated channels",
+        default=True,
+    )
+    bake_anim_step: bpy.props.FloatProperty(
+        name="Sampling Rate",
+        description="How often to evaluate animated values (in frames)",
+        min=0.01,
+        max=100.0,
+        soft_min=0.1,
+        soft_max=10.0,
+        default=1.0,
+    )
+    bake_anim_simplify_factor: bpy.props.FloatProperty(
+        name="Simplify",
+        description="How much to simplify baked values (0.0 to disable, the higher the more simplified)",
+        min=0.0,
+        max=100.0,  # No simplification to up to 10% of current magnitude tolerance.
+        soft_min=0.0,
+        soft_max=10.0,
+        default=1.0,  # default: min slope: 0.005, max frame step: 10.
+    )
+    path_mode: path_reference_mode
+    embed_textures: bpy.props.BoolProperty(
+        name="Embed Textures",
+        description='Embed textures in FBX binary file (only for "Copy" path mode!)',
+        default=False,
+    )
+    batch_mode: bpy.props.EnumProperty(
+        name="Batch Mode",
+        items=(
+            ("OFF", "Off", "Active scene to file"),
+            ("SCENE", "Scene", "Each scene as a file"),
+            (
+                "COLLECTION",
+                "Collection",
+                "Each collection (data-block ones) as a file, does not include content of children collections",
+            ),
+            (
+                "SCENE_COLLECTION",
+                "Scene Collections",
+                "Each collection (including master, non-data-block ones) of each scene as a file, "
+                "including content from children collections",
+            ),
+            (
+                "ACTIVE_SCENE_COLLECTION",
+                "Active Scene Collections",
+                "Each collection (including master, non-data-block one) of the active scene as a file, "
+                "including content from children collections",
+            ),
+        ),
+    )
+    use_batch_own_dir: bpy.props.BoolProperty(
+        name="Batch Own Dir",
+        description="Create a dir for each exported file",
+        default=True,
+    )
+    use_metadata: bpy.props.BoolProperty(
+        name="Use Metadata",
+        default=True,
+        options={"HIDDEN"},
     )
 
 
-class SSE_SCENE_vrm_parameters(bpy.types.PropertyGroup):
+class SSE_SCENE_fbx_parameters(FBXParameters):
+    pass
+
+
+class VRMParameters(ExporterParametersBase):
+    ignore_props = (
+        "exporter",
+        "use_addon_preferences",
+        "export_only_selections",
+    )
+
+    use_addon_preferences: bpy.props.BoolProperty(  #
+        name="Export using add-on preferences",
+        description="Export using add-on preferences instead of operator arguments",
+    )
+    export_invisibles: bpy.props.BoolProperty(
+        name="Export Invisible Objects",
+    )
+    export_only_selections: bpy.props.BoolProperty(
+        name="Export Only Selections",
+    )
+    enable_advanced_preferences: bpy.props.BoolProperty(
+        name="Enable Advanced Options",
+    )
+    export_fb_ngon_encoding: bpy.props.BoolProperty(
+        name="Try the FB_ngon_encoding under development" + " (Exported meshes can be corrupted)",
+    )
+    export_all_influences: bpy.props.BoolProperty(
+        name="Export All Bone Influences",
+        description="Don't limit to 4, most viewers truncate to 4, "
+        + "so bone movement may cause jagged meshes",
+        default=False,
+    )
+    export_lights: bpy.props.BoolProperty(
+        name="Export Lights",
+    )
+
+
+class SSE_SCENE_vrm_parameters(VRMParameters):
     pass
 
 

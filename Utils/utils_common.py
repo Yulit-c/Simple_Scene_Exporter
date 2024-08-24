@@ -17,6 +17,9 @@ else:
 from typing import Any
 
 import bpy
+from addon_utils import paths, check
+from bpy.path import module_names
+
 from ..property_groups import (
     get_addon_prop_root,
     get_export_settings,
@@ -40,6 +43,19 @@ logger = preparating_logger(__name__)
     Functions
 ------------------------------------------------------------
 ---------------------------------------------------------"""
+
+
+def get_enabled_addon_list():
+    enabled_addon_list = []
+    for path in paths():
+        for mod_name, mod_path in module_names(path):
+            is_enabled, is_loaded = check(mod_name)
+            if not is_enabled:
+                continue
+            if "VRM_Addon_for_Blender" in mod_name:
+                mod_name = mod_name.split("-")[0]
+            enabled_addon_list.append(mod_name)
+    return enabled_addon_list
 
 
 def get_parameters_as_dict(self):
