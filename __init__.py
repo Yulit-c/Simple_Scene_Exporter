@@ -82,6 +82,8 @@ def register():
 
 
 def unregister():
+    del bpy.types.Scene.simple_scene_exporter
+
     for cls in CLASSES:
         if hasattr(bpy.types, cls.__name__):
             bpy.utils.unregister_class(cls)
