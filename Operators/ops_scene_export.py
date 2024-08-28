@@ -141,7 +141,8 @@ class SSE_OT_scene_export(SSE_OperatorBase):
             return {"CANCELLED"}
 
         # 出力先のディレクトリパスを作成
-        dest_path = Path(export_settings.destination_path)
+        dest_abs_path = bpy.path.abspath(export_settings.destination_path)
+        dest_path = Path(dest_abs_path)
         if not dest_path.exists():
             self.report({"INFO"}, f"Dest Path does not exist : {dest_path}")
             return {"CANCELLED"}

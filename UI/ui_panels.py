@@ -79,7 +79,7 @@ class SSE_PT_view_3d_panel(bpy.types.Panel):
         # ----------------------------------------------------------
         exporter = "FBX"
         row = col.row(align=True)
-        op = row.operator(SSE_OT_scene_export.bl_idname)
+        op = row.operator(SSE_OT_scene_export.bl_idname, text="FBX Export")
         op.exporter = exporter
         op = row.operator(SSE_OT_set_fbx_parameters.bl_idname, text="", icon="PREFERENCES")
         op.exporter = exporter
@@ -89,7 +89,7 @@ class SSE_PT_view_3d_panel(bpy.types.Panel):
         exporter = "VRM"
         row = col.row(align=True)
         row.enabled = "VRM_Addon_for_Blender" in get_enabled_addon_list()
-        op = row.operator(SSE_OT_scene_export.bl_idname)
+        op = row.operator(SSE_OT_scene_export.bl_idname, text="VRM Export")
         op.exporter = exporter
         op = row.operator(SSE_OT_set_vrm_parameters.bl_idname, text="", icon="PREFERENCES")
         op.exporter = exporter
