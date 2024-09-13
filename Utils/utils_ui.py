@@ -131,6 +131,7 @@ def draw_vrm_parameters(data: VRMParameters, layout: bpy.types.UILayout):
     layout.prop(data, "enable_advanced_preferences")
     if data.enable_advanced_preferences:
         box = layout.box()
+        box.prop(data, "export_invisibles")
         box.prop(data, "export_fb_ngon_encoding")
         box.prop(data, "export_all_influences")
         box.prop(data, "export_lights")
