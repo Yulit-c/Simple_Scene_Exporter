@@ -447,6 +447,7 @@ class VRMParameters(ExporterParametersBase):
     )
     export_invisibles: bpy.props.BoolProperty(
         name="Export Invisible Objects",
+        default=True,
     )
     export_only_selections: bpy.props.BoolProperty(
         name="Export Only Selections",
