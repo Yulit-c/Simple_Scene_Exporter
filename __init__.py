@@ -1,8 +1,8 @@
 bl_info = {
     "name": "Simple Scene Exporter",
     "author": "Yu-Lit",
-    "version": (0, 2, 0),
-    "blender": (4, 1, 0),
+    "version": (0, 3, 0),
+    "blender": (4, 2, 0),
     "location": "",
     "description": "",
     "warning": "",
@@ -21,7 +21,7 @@ if "bpy" in locals():
         "debug",
         "property_groups",
         "ops_scene_export",
-        "ui_panels",
+        "ui",
     ]
 
     for module in reloadable_modules:
@@ -33,7 +33,7 @@ else:
     from . import debug
     from . import property_groups
     from .Operators import ops_scene_export
-    from .UI import ui_panels
+    from .UI import ui
 
 
 import bpy
@@ -50,7 +50,7 @@ from .debug import (
 ---------------------------------------------------------"""
 from .Logging.preparation_logger import preparating_logger
 
-logger = preparating_logger(__name__)
+logger = preparating_logger(__package__)
 
 
 """---------------------------------------------------------
@@ -61,7 +61,7 @@ logger = preparating_logger(__name__)
 CLASSES = (
     *property_groups.CLASSES,
     *ops_scene_export.CLASSES,
-    *ui_panels.CLASSES,
+    *ui.CLASSES,
 )
 
 
@@ -76,6 +76,12 @@ def register():
     bpy.types.Scene.simple_scene_exporter = bpy.props.PointerProperty(
         type=property_groups.SSE_SCENE_root_property_group
     )
+    bpy.types.Collection.simple_scene_exporter = bpy.props.PointerProperty(
+        type=property_groups.SSE_COLL_root_property_group
+    )
+    bpy.types.WindowManager.simple_scene_exporter = bpy.props.PointerProperty(
+        type=property_groups.SSE_WM_root_property_group
+    )
 
     # デバッグ用
     # launch_debug_server()
@@ -83,6 +89,7 @@ def register():
 
 def unregister():
     del bpy.types.Scene.simple_scene_exporter
+    del bpy.types.WindowManager.simple_scene_exporter
 
     for cls in CLASSES:
         if hasattr(bpy.types, cls.__name__):

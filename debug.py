@@ -1,9 +1,10 @@
 """----------------------------------------------------
 # Logger の設定
 -----------------------------------------------------"""
+
 from .Logging.preparation_logger import preparating_logger
 
-logger = preparating_logger(__name__)
+logger = preparating_logger(__package__)
 #######################################################
 
 

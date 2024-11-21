@@ -34,7 +34,7 @@ from ..property_groups import (
 ---------------------------------------------------------"""
 from ..Logging.preparation_logger import preparating_logger
 
-logger = preparating_logger(__name__)
+logger = preparating_logger(__package__)
 #######################################################
 
 """---------------------------------------------------------

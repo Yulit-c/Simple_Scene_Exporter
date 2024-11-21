@@ -35,7 +35,7 @@ from ..property_groups import (
 ---------------------------------------------------------"""
 from ..Logging.preparation_logger import preparating_logger
 
-logger = preparating_logger(__name__)
+logger = preparating_logger(__package__)
 #######################################################
 
 """---------------------------------------------------------
@@ -69,11 +69,18 @@ def get_parameters_as_dict(self):
         case 1:
             exporter_prop = addon_prop.vrm_settings
     # 取得したプロパティグループの全てのフィールドの値を辞書として取得する
-    [dic_op_parameters.setdefault(k, getattr(exporter_prop, k)) for k in [*exporter_prop.__annotations__]]
+    [
+        dic_op_parameters.setdefault(k, getattr(exporter_prop, k))
+        for k in [*exporter_prop.__annotations__]
+    ]
     return dic_op_parameters
 
 
-def set_parameters(self, target_object: bpy.types.Operator | bpy.types.PropertyGroup, parameters: dict[Any]):
+def set_parameters(
+    self,
+    target_object: bpy.types.Operator | bpy.types.PropertyGroup,
+    parameters: dict[Any],
+):
     # 取得したパラメーターをOperatorまたはPropertyGroupの値にセットする｡
     for k, v in parameters.items():
         setattr(target_object, k, v)

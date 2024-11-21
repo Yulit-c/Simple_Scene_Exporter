@@ -29,7 +29,7 @@ from bpy_extras.io_utils import (
 ---------------------------------------------------------"""
 from .Logging.preparation_logger import preparating_logger
 
-logger = preparating_logger(__name__)
+logger = preparating_logger(__package__)
 #######################################################
 
 
@@ -41,13 +41,30 @@ logger = preparating_logger(__name__)
 
 
 class SSE_SCENE_export_settings(bpy.types.PropertyGroup):
+    def get_source_collection(self) -> bpy.types.Collection | None:
+        return self.source_collection
+
     source_collection: bpy.props.PointerProperty(
         name="Source Collection",
         description="",
         type=bpy.types.Collection,
     )
     destination_path: bpy.props.StringProperty(
-        name="Destination Path", description="", default="", subtype="DIR_PATH"
+        name="Destination Path",
+        description="Export files to this directory",
+        default="",
+        subtype="DIR_PATH",
+    )
+    copy_files: bpy.props.BoolProperty(
+        name="Copy Files",
+        description="If active, copy the exported files to the specified directory",
+        default=False,
+    )
+    copy_destination_path: bpy.props.StringProperty(
+        name="Copy Destination Path",
+        description="Copy files to this directory",
+        default="",
+        subtype="DIR_PATH",
     )
     make_today_sub_dir: bpy.props.BoolProperty(
         name="Make Today's Dir",
@@ -86,7 +103,9 @@ class ExporterParametersBase(bpy.types.PropertyGroup):
         return dic_op_parameters
 
     def set_parameters(
-        self, target_data: bpy.types.Operator | bpy.types.PropertyGroup, parameters: dict[Any]
+        self,
+        target_data: bpy.types.Operator | bpy.types.PropertyGroup,
+        parameters: dict[Any],
     ):
         # 取得したパラメーターをOperatorまたはPropertyGroupのプロパティにセットする｡
         for k, v in parameters.items():
@@ -192,7 +211,11 @@ class FBXParameters(ExporterParametersBase):
                 "FBX Custom Scale",
                 "Apply custom scaling to FBX scale, and units scaling to each object transformation",
             ),
-            ("FBX_SCALE_ALL", "FBX All", "Apply custom scaling and units scaling to FBX scale"),
+            (
+                "FBX_SCALE_ALL",
+                "FBX All",
+                "Apply custom scaling and units scaling to FBX scale",
+            ),
         ),
         name="Apply Scalings",
         description="How to apply custom and units scalings in generated FBX file "
@@ -223,7 +246,11 @@ class FBXParameters(ExporterParametersBase):
             ("LIGHT", "Lamp", ""),
             ("ARMATURE", "Armature", "WARNING: not supported in dupli/group instances"),
             ("MESH", "Mesh", ""),
-            ("OTHER", "Other", "Other geometry types, like curve, metaball, etc. (converted to meshes)"),
+            (
+                "OTHER",
+                "Other",
+                "Other geometry types, like curve, metaball, etc. (converted to meshes)",
+            ),
         ),
         description="Which kind of object to export",
         default={"EMPTY", "CAMERA", "LIGHT", "ARMATURE", "MESH", "OTHER"},
@@ -243,7 +270,11 @@ class FBXParameters(ExporterParametersBase):
     mesh_smooth_type: bpy.props.EnumProperty(
         name="Smoothing",
         items=(
-            ("OFF", "Normals Only", "Export only normals instead of writing edge or face smoothing data"),
+            (
+                "OFF",
+                "Normals Only",
+                "Export only normals instead of writing edge or face smoothing data",
+            ),
             ("FACE", "Face", "Write face smoothing"),
             ("EDGE", "Edge", "Write edge smoothing"),
         ),
@@ -333,8 +364,16 @@ class FBXParameters(ExporterParametersBase):
         name="Armature FBXNode Type",
         items=(
             ("NULL", "Null", "'Null' FBX node, similar to Blender's Empty (default)"),
-            ("ROOT", "Root", "'Root' FBX node, supposed to be the root of chains of bones..."),
-            ("LIMBNODE", "LimbNode", "'LimbNode' FBX node, a regular joint between two bones..."),
+            (
+                "ROOT",
+                "Root",
+                "'Root' FBX node, supposed to be the root of chains of bones...",
+            ),
+            (
+                "LIMBNODE",
+                "LimbNode",
+                "'LimbNode' FBX node, a regular joint between two bones...",
+            ),
         ),
         description="FBX type of node (object) used to represent Blender's armatures "
         "(use the Null type unless you experience issues with the other app, "
@@ -456,7 +495,8 @@ class VRMParameters(ExporterParametersBase):
         name="Enable Advanced Options",
     )
     export_fb_ngon_encoding: bpy.props.BoolProperty(
-        name="Try the FB_ngon_encoding under development" + " (Exported meshes can be corrupted)",
+        name="Try the FB_ngon_encoding under development"
+        + " (Exported meshes can be corrupted)",
     )
     export_all_influences: bpy.props.BoolProperty(
         name="Export All Bone Influences",
@@ -494,6 +534,100 @@ class SSE_SCENE_root_property_group(bpy.types.PropertyGroup):
 
 """---------------------------------------------------------
 ------------------------------------------------------------
+    Collection
+------------------------------------------------------------
+---------------------------------------------------------"""
+
+
+class SSE_COLL_target_info(bpy.types.PropertyGroup):
+    is_target: bpy.props.BoolProperty(
+        name="Is Target",
+        description="If active, this collection is target of export",
+        default=False,
+    )
+
+
+class SSE_COLL_root_property_group(bpy.types.PropertyGroup):
+    def get_target_info(self) -> SSE_COLL_target_info:
+        return self.target_info
+
+    target_info: bpy.props.PointerProperty(
+        name="Target Info",
+        description="",
+        type=SSE_COLL_target_info,
+    )
+
+
+"""---------------------------------------------------------
+------------------------------------------------------------
+    Window Manager
+------------------------------------------------------------
+---------------------------------------------------------"""
+
+
+class SSE_WM_target_collection(bpy.types.PropertyGroup):
+    def get_collection(self) -> bpy.types.Collection | None:
+        return self.collection
+
+    item_type: bpy.props.EnumProperty(
+        name="Item Type",
+        description=("Collection : Collection\n" "None : Dummy Item"),
+        items=(
+            ("COLLECTION", "Collection", ""),
+            ("NONE", "None", ""),
+        ),
+        default="COLLECTION",
+    )
+
+    collection: bpy.props.PointerProperty(
+        name="Collection",
+        description="",
+        type=bpy.types.Collection,
+    )
+
+
+class SSE_WM_target_collections(bpy.types.PropertyGroup):
+    def reflesh_target_collection_list(self):
+        self.target_collection_list.clear()
+        if not (source_collection := get_export_settings().get_source_collection()):
+            new = self.target_collection_list.add()
+            new.item_type = "NONE"
+            new.name = "Source Collection is Empty"
+            return
+        for coll in source_collection.children:
+            new = self.target_collection_list.add()
+            new.name = coll.name
+            new.collection = coll
+        self.target_collections_active_index = min(
+            len(self.target_collection_list) - 1, self.target_collections_active_index
+        )
+
+    target_collection_list: bpy.props.CollectionProperty(
+        name="Target Collection List",
+        description="",
+        type=SSE_WM_target_collection,
+    )
+    target_collections_active_index: bpy.props.IntProperty(
+        name="Active Index",
+        description="",
+        default=-1,
+        min=-1,
+    )
+
+
+class SSE_WM_root_property_group(bpy.types.PropertyGroup):
+    def get_target_collections(self) -> SSE_WM_target_collections:
+        return self.target_collections
+
+    target_collections: bpy.props.PointerProperty(
+        name="Target Collections",
+        description="",
+        type=SSE_WM_target_collections,
+    )
+
+
+"""---------------------------------------------------------
+------------------------------------------------------------
     Functions
 ------------------------------------------------------------
 ---------------------------------------------------------"""
@@ -522,6 +656,16 @@ def get_vrm_parameters() -> SSE_SCENE_vrm_parameters:
     return prop
 
 
+def get_coll_root_prop(coll: bpy.types.Collection) -> SSE_COLL_root_property_group:
+    prop_root = coll.simple_scene_exporter
+    return prop_root
+
+
+def get_wm_root_prop() -> SSE_WM_root_property_group:
+    prop_root = bpy.context.window_manager.simple_scene_exporter
+    return prop_root
+
+
 """---------------------------------------------------------
 ------------------------------------------------------------
     Resiter Target
@@ -532,4 +676,9 @@ CLASSES = (
     SSE_SCENE_fbx_parameters,
     SSE_SCENE_vrm_parameters,
     SSE_SCENE_root_property_group,
+    SSE_COLL_target_info,
+    SSE_COLL_root_property_group,
+    SSE_WM_target_collection,
+    SSE_WM_target_collections,
+    SSE_WM_root_property_group,
 )

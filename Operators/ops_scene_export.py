@@ -18,22 +18,13 @@ else:
     from ..Utils import utils_common
     from ..Utils import utils_ui
 
-import re
+import shutil
 from pathlib import Path
 from datetime import datetime
 
 import bpy
 
-from ..property_groups import (
-    FBXParameters,
-    VRMParameters,
-    SSE_SCENE_fbx_parameters,
-    SSE_SCENE_vrm_parameters,
-    get_addon_prop_root,
-    get_export_settings,
-    get_fbx_parameters,
-    get_vrm_parameters,
-)
+from ..property_groups import *
 from ..Utils.utils_ui import (
     draw_fbx_parameters,
     draw_vrm_parameters,
@@ -46,7 +37,7 @@ from ..Utils.utils_ui import (
 ---------------------------------------------------------"""
 from ..Logging.preparation_logger import preparating_logger
 
-logger = preparating_logger(__name__)
+logger = preparating_logger(__package__)
 #######################################################f
 
 
@@ -55,6 +46,38 @@ logger = preparating_logger(__name__)
     Operators
 ------------------------------------------------------------
 ---------------------------------------------------------"""
+
+
+class SSE_OT_set_target_collections(bpy.types.Operator):
+    bl_idname = "sse.set_target_collections"
+    bl_label = "Set Target Collections"
+    bl_description = ""
+    bl_options = {"INTERNAL", "UNDO"}
+
+    mode: bpy.props.EnumProperty(
+        name="Mode",
+        description="",
+        items=(
+            ("INCLUDE", "Include", ""),
+            ("EXCLUDE", "Exclude", ""),
+            ("INVERT", "Invert", ""),
+        ),
+        default="INCLUDE",
+    )
+
+    def execute(self, context):
+        source_collection = get_export_settings().get_source_collection()
+        for coll in source_collection.children:
+            target_info = get_coll_root_prop(coll).get_target_info()
+            match self.mode:
+                case "INCLUDE":
+                    target_info.is_target = True
+                case "EXCLUDE":
+                    target_info.is_target = False
+                case "INVERT":
+                    target_info.is_target = not (target_info.is_target)
+
+        return {"FINISHED"}
 
 
 class SSE_OperatorBase(bpy.types.Operator):
@@ -139,74 +162,67 @@ class SSE_OT_scene_export(SSE_OperatorBase):
         if not export_settings.source_collection:
             self.report({"INFO"}, f"Source Collection is not selected")
             return {"CANCELLED"}
+        target_collection_list = (
+            get_wm_root_prop().get_target_collections().target_collection_list
+        )
+        if target_collection_list[0].item_type == "NONE":
+            self.report({"INFO"}, f"Collection not linked to source collection")
+            return {"CANCELLED"}
+        if not export_settings.destination_path:
+            self.report({"INFO"}, f"Destination Path is not defined")
+            return {"CANCELLED"}
+        if export_settings.copy_files and not export_settings.copy_destination_path:
+            self.report({"INFO"}, f"Copy Destination Path is not defined")
+            return {"CANCELLED"}
+        if export_settings.destination_path == export_settings.copy_destination_path:
+            self.report({"INFO"}, f"Destination and Copy Destination Path are the same")
+            return {"CANCELLED"}
 
         # 出力先のディレクトリパスを作成
         dest_abs_path = bpy.path.abspath(export_settings.destination_path)
         dest_path = Path(dest_abs_path)
-        if not dest_path.exists():
-            self.report({"INFO"}, f"Dest Path does not exist : {dest_path}")
-            return {"CANCELLED"}
-        # プロパティに応じて今日付のディレクトリを作成する
-        date = datetime.today()
-        today = f"{date.year}_{date.month:0>2}_{date.day:0>2}"
-        if export_settings.make_today_sub_dir:
-            dest_path = dest_path.joinpath(today)
-            dest_path.mkdir(exist_ok=True)
-
-        # 出力ファイルパスを生成
-        base_name = f"{export_settings.file_base_name}"
-        # 今日付のタイムスタンプを付与する
-        if export_settings.add_date_suffix:
-            base_name += f"_{today}"
-        # Overrideしない場合は連番を付与する
-        new_numbering = None
-        if not export_settings.enable_overwrite:
-            for i in dest_path.glob(f"{base_name}*"):
-                if not (mo := re.search(rf"({base_name})_(\d{{3}}$)", i.stem)):
-                    continue
-                old_numbering = mo[2]
-                new_numbering = f"{int(old_numbering) + 1:0>3}"
-            # 既存連番ファイルが無い場合は000を付与する
-            numeric = new_numbering if new_numbering else "000"
-            base_name += f"_{numeric}"
-
-        file_name = f"{base_name }.{self.exporter.lower()}"  # {base_name}_{YYYY_MM_DD}_{numeric}.{extension}
-        file_path = str(dest_path.joinpath(file_name))
+        dest_path.mkdir(exist_ok=True)
 
         # アンドゥ履歴へ登録
         history_label = f"Simple {self.exporter} Export"
         bpy.ops.ed.undo_push(message=history_label)
 
-        # エクスポーターに対応したファイルをエクスポートする
-        with context.temp_override(selected_objects=export_settings.source_collection.all_objects):
-            match self.exporter:
-                case "FBX":
-                    fbx_settings = get_fbx_parameters()
-                    parameters = fbx_settings.get_parameters_as_dict(fbx_settings.ignore_props)
-                    bpy.ops.export_scene.fbx(
-                        filepath=file_path,
-                        use_selection=True,
-                        **parameters,
-                    )
+        target: SSE_WM_target_collection
+        # Source Collectionの子コレクションの内､ターゲットのコレクションをエクスポートする
+        for target in target_collection_list:
+            if not (target_coll := target.get_collection()):
+                continue
+            if not get_coll_root_prop(target_coll).get_target_info().is_target:
+                continue
 
-                case "VRM":
-                    vrm_settings = get_vrm_parameters()
-                    parameters = vrm_settings.get_parameters_as_dict(vrm_settings.ignore_props)
-                    l = [i for i in context.selected_objects if i.type == "ARMATURE"]
-                    if not len(l):
-                        self.report({"INFO"}, f"Armature Object Count is not 1")
-                        return {"CANCELLED"}
-                    armature_object = l[0]
-                    logger.debug(armature_object.name)
-                    bpy.ops.export_scene.vrm(
-                        filepath=file_path,
-                        use_addon_preferences=False,
-                        export_only_selections=True,
-                        armature_object_name=armature_object.name,
-                        **parameters,
-                    )
+            # 出力ファイルパスを生成
+            base_name = f"{target_coll.name}"
 
-        self.report({"INFO"}, f"Exported {self.exporter} File : {file_path}")
+            file_name = f"{base_name }.{self.exporter.lower()}"
+            file_path = dest_path.joinpath(file_name)
+
+            # エクスポーターに対応したファイルをエクスポートする
+            with context.temp_override(selected_objects=target_coll.all_objects):
+                match self.exporter:
+                    case "FBX":
+                        fbx_settings = get_fbx_parameters()
+                        parameters = fbx_settings.get_parameters_as_dict(
+                            fbx_settings.ignore_props
+                        )
+                        bpy.ops.export_scene.fbx(
+                            filepath=str(file_path), use_selection=True, **parameters
+                        )
+                logger.debug(f"Exported {self.exporter} File : {file_path}")
+
+            # 出力ファイルのコピー
+            if not (export_settings.copy_files and file_path.exists()):
+                continue
+
+            copy_dest_abs_path = bpy.path.abspath(export_settings.copy_destination_path)
+            copy_dest_path = Path(copy_dest_abs_path)
+            copy_file_path = copy_dest_path.joinpath(file_name)
+            shutil.copyfile(file_path, copy_file_path)
+            logger.debug(f"Copied FIle : {file_path} -->> {copy_file_path}\n")
 
         return {"FINISHED"}
 
@@ -217,6 +233,7 @@ class SSE_OT_scene_export(SSE_OperatorBase):
 ------------------------------------------------------------
 ---------------------------------------------------------"""
 CLASSES = (
+    SSE_OT_set_target_collections,
     SSE_OT_scene_export,
     SSE_OT_set_fbx_parameters,
     SSE_OT_set_vrm_parameters,
