@@ -1,11 +1,11 @@
-import toml
+import tomllib
 from pathlib import Path
 from logging import getLogger, config
 import bpy
 
 path_log_config = Path(__file__).parent.joinpath(r"log_config.toml")
-with open(path_log_config, "r") as f:
-    log_conf = toml.load(f)
+with open(path_log_config, "rb") as f:
+    log_conf = tomllib.load(f)
 config.dictConfig(log_conf)
 
 
